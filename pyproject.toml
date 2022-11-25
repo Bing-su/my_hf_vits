@@ -1,0 +1,15 @@
+[project]
+name = "my-hf-vits"
+description = "vits tts model with huggingface"
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    { name = "Dowon", email = "ks2515@naver.com"}
+]
+
+[project.urls]
+repository = "https://github.com/Bing-su/my_hf_vits"
+
+[tool.isort]
+profile = "black"
