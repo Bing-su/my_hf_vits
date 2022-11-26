@@ -1,1 +1,1 @@
-from .configuration_vits import VITSConfig
+from .configuration_vits import VITSConfig  # noqa: F401
