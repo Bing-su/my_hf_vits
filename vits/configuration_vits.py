@@ -25,13 +25,13 @@ class VITSConfig(PretrainedConfig):
         pe_wavenet_dilation_rate: int = 1,
         pe_wavenet_n_resblocks: int = 16,
         # decoder
+        decoder_type: str = "mb_istft",
         upsample_initial_channel: int = 512,
         deconv_strides: List[int] = [8, 8, 2, 2],
         deconv_kernel_sizes: List[int] = [16, 16, 4, 4],
         resblock_kernel_sizes: List[int] = [3, 7, 11],
         resblock_dilation_sizes: List[List[int]] = [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
         ## istft decoder
-        decoder_type: str = "mb_istft",
         upsample_rates: List[int] = [4, 4],
         upsample_kernel_sizes: List[int] = [16, 16],
         subbands: int = 4,
@@ -91,13 +91,13 @@ class VITSConfig(PretrainedConfig):
         self.pe_wavenet_dilation_rate = pe_wavenet_dilation_rate
         self.pe_wavenet_n_resblocks = pe_wavenet_n_resblocks
         # decoder
+        self.decoder_type = decoder_type
         self.upsample_initial_channel = upsample_initial_channel
         self.deconv_strides = deconv_strides
         self.deconv_kernel_sizes = deconv_kernel_sizes
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.resblock_dilation_sizes = resblock_dilation_sizes
         ## istft decoder
-        self.decoder_type = decoder_type
         self.upsample_rates = upsample_rates
         self.upsample_kernel_sizes = upsample_kernel_sizes
         self.subbands = subbands
