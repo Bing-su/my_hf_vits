@@ -1,0 +1,121 @@
+[decoder]
+[decoder.ResNetBlock]
+channels = "Decoder.upsample_initial_channel // (2**(i+1))"
+kernel_size = 3  # Decoder.resblock_kernel_sizes
+dilation = [1, 3, 5]  # Decoder.resblock_dilation_sizes
+
+[decoder.Decoder]
+speaker_id_embedding_dim = "int"
+upsample_initial_channel = 512
+deconv_strides = [8, 8, 2, 2]  # Deconv1d
+deconv_kernel_sizes = [16, 16, 4, 4]  # Deconv1d
+resblock_kernel_sizes = [3, 7, 11]  # ResnetBlock
+resblock_dilation_sizes = [[1, 3, 5], [1, 3, 5], [1, 3, 5]]  # ResnetBlock
+
+[flow]
+[flow.ResidualCouplingLayer]
+in_channels = "Flow.in_z_channels"
+phoneme_embedding_dim = 192
+speaker_id_embedding_dim = 0
+kernel_size = 5  # wavenet conv1d
+dilation_rate = 1  # wavelet conv1d
+n_resblocks = 4  # wavenet ResnetBlock
+
+[flow.Flow]
+speaker_id_embedding_dim = 256
+in_z_channels = 192
+phoneme_embedding_dim = 192
+n_flows = 4
+kernel_size = 5
+dilation_rate = 1
+n_resblocks = 4
+
+[posterior_encoder]
+[posterior_encoder.PosteriorEncoder]
+speaker_id_embedding_dim = "int"
+in_spec_channels = 513
+out_z_channels = 192
+phoneme_embedding_dim = 192
+kernel_size = 5  # wavenet conv1d
+dilation_rate = 1  # wavenet conv1d
+n_resblocks = 16  # wavenet ResnetBlock
+
+[stochastic_duration_predictor]
+[stochastic_duration_predictor.StochasticDurationPredictor]
+speaker_id_embedding_dim = "int"
+phoneme_embedding_dim = 192
+filter_channels = 192
+kernel_size = 3
+p_dropout = 0.5
+n_flows = 4
+
+[stochastic_duration_predictor.DDSConv]
+channels = "StochasticDurationPredictor.filter_channels"
+kernel_size = "StochasticDurationPredictor.kernel_size"
+n_layers = 3
+p_dropout = "StochasticDurationPredictor.p_dropout"
+
+[stochastic_duration_predictor.ConvFlow]
+in_channels = 2
+filter_channels = "StochasticDurationPredictor.filter_channels"
+kernel_size = "StochasticDurationPredictor.kernel_size"
+n_layers = 3
+num_bins = 10
+tail_bound = 5.0
+
+[stochastic_duration_predictor.ElementwiseAffine]
+channels = 2  # == ConvFlow.in_channels
+
+[text_encoder]
+[text_encoder.TextEncoder]
+n_phoneme = "int"  # vocab_size
+phoneme_embedding_dim = 192
+out_channels = 192
+n_heads = 2  # MultiHeadAttention
+n_layers = 6  # num MultiHeadAttention
+kernel_size = 3  # Encoder, FeedForwardNetwork
+filter_channels = 768  # Encoder, FeedForwardNetwork
+p_dropout = 0.1  # Encoder
+
+[text_encoder.Encoder]
+phoneme_embedding_dim = "TextEncoder.phoneme_embedding_dim"
+filter_channels = "TextEncoder.filter_channels"
+n_heads = "TextEncoder.n_heads"
+n_layers = "TextEncoder.n_layers"
+kernel_size = "TextEncoder.kernel_size"
+p_dropout = "TextEncoder.p_dropout"
+window_size = 4  # MultiHeadAttention
+
+[text_encoder.FeedForwardNetwork]
+in_channels = "TextEncoder.phoneme_embedding_dim"
+out_channels = "TextEncoder.phoneme_embedding_dim"
+filter_channels = "TextEncoder.filter_channels"
+kernel_size = "TextEncoder.kernel_size"
+p_dropout = "TextEncoder.p_dropout"
+
+[text_encoder.MultiHeadAttention]
+channels = "TextEncoder.phoneme_embedding_dim"
+out_channels = "TextEncoder.phoneme_embedding_dim"
+n_heads = "TextEncoder.n_heads"
+p_dropout = "TextEncoder.p_dropout"
+window_size = "Encoder.window_size"
+# ↓↓↓ Don't use
+heads_share = true
+block_length = "None"
+proximal_bias = false
+proximal_init = false
+
+[wn]
+[wn.WN]
+hidden_channels = "int"
+kernel_size = "int"  # ResidualBlock conv1d
+dilation_rate = "int"  # ResidualBlock conv1d
+n_resblocks = "int"  # ResidualBlock
+speaker_id_embedding_dim = "int"
+
+[vits_discriminator]
+[vits_discriminator.PeriodicDiscriminator]
+period = [2, 3, 5, 7, 11]
+kernel_size = 5
+stride = 3
+padding = 2
