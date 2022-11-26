@@ -13,15 +13,14 @@ class VITSConfig(PretrainedConfig):
         speaker_id_embedding_dim: int = 256,
         n_speakers: int = 1,
         speaker_to_id: Optional[Dict[str, int]] = None,
+        z_channels: int = 192,
         # text encoder
         n_heads: int = 2,
         n_layers: int = 6,
-        text_encoder_out_channels: int = 192,
         text_encoder_kernel_size: int = 3,
         text_encoder_p_dropout: float = 0.1,
         # posterior encoder
-        in_spec_channels: int = 513,
-        out_z_channels: int = 192,
+        spec_channels: int = 513,
         pe_wavenet_kernel_size: int = 5,
         pe_wavenet_dilation_rate: int = 1,
         pe_wavenet_n_resblocks: int = 16,
@@ -32,14 +31,13 @@ class VITSConfig(PretrainedConfig):
         resblock_kernel_sizes: List[int] = [3, 7, 11],
         resblock_dilation_sizes: List[List[int]] = [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
         ## istft decoder
-        decoder_type: str = "mb_istft_vits",
+        decoder_type: str = "mb_istft",
         upsample_rates: List[int] = [4, 4],
         upsample_kernel_sizes: List[int] = [16, 16],
         subbands: int = 4,
         gen_istft_n_fft: int = 16,
         gen_istft_hop_size: int = 4,
         # flow
-        in_z_channels: int = 192,
         flow_n_flows: int = 4,
         flow_wavenet_kernel_size: int = 5,
         flow_wavenet_dilation_rate: int = 1,
@@ -49,19 +47,21 @@ class VITSConfig(PretrainedConfig):
         sdp_kernel_size: int = 3,
         sdp_p_dropout: float = 0.5,
         sdp_n_flows: int = 4,
+        # generator
+        segment_size: int = 32,
         # etc
         **kwargs,
     ):
         decoder_type = decoder_type.lower()
         if decoder_type not in [
-            "ms_istft_vits",
-            "mb_istft_vits",
-            "istft_vits",
-            "vits_original",
+            "ms_istft",
+            "mb_istft",
+            "istft",
+            "original",
         ]:
             raise ValueError(
                 "decoder_type must be one of "
-                "ms_istft_vits, mb_istft_vits, istft_vits, vits_original, "
+                "['ms_istft', 'mb_istft', 'istft', 'original'], "
                 f"but got {decoder_type}"
             )
 
@@ -79,15 +79,14 @@ class VITSConfig(PretrainedConfig):
         self.speaker_id_embedding_dim = speaker_id_embedding_dim
         self.n_speakers = n_speakers
         self.speaker_to_id = speaker_to_id
+        self.z_channels = z_channels
+        self.spec_channels = spec_channels
         # text encoder
         self.n_heads = n_heads
         self.n_layers = n_layers
-        self.text_encoder_out_channels = text_encoder_out_channels
         self.text_encoder_kernel_size = text_encoder_kernel_size
         self.text_encoder_p_dropout = text_encoder_p_dropout
         # posterior encoder
-        self.in_spec_channels = in_spec_channels
-        self.out_z_channels = out_z_channels
         self.pe_wavenet_kernel_size = pe_wavenet_kernel_size
         self.pe_wavenet_dilation_rate = pe_wavenet_dilation_rate
         self.pe_wavenet_n_resblocks = pe_wavenet_n_resblocks
@@ -105,7 +104,6 @@ class VITSConfig(PretrainedConfig):
         self.gen_istft_n_fft = gen_istft_n_fft
         self.gen_istft_hop_size = gen_istft_hop_size
         # flow
-        self.in_z_channels = in_z_channels
         self.flow_n_flows = flow_n_flows
         self.flow_wavenet_kernel_size = flow_wavenet_kernel_size
         self.flow_wavenet_dilation_rate = flow_wavenet_dilation_rate
@@ -115,5 +113,7 @@ class VITSConfig(PretrainedConfig):
         self.sdp_kernel_size = sdp_kernel_size
         self.sdp_p_dropout = sdp_p_dropout
         self.sdp_n_flows = sdp_n_flows
+        # generator
+        self.segment_size = segment_size
 
         super().__init__(**kwargs)
