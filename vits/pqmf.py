@@ -97,14 +97,14 @@ class PQMF(nn.Module):
         synthesis_filter = torch.from_numpy(h_synthesis).float().unsqueeze(0)
 
         # register coefficients as buffer
-        self.register_buffer("analysis_filter", analysis_filter)
-        self.register_buffer("synthesis_filter", synthesis_filter)
+        self.register_buffer("analysis_filter", analysis_filter, persistent=False)
+        self.register_buffer("synthesis_filter", synthesis_filter, persistent=False)
 
         # filter for downsampling & upsampling
         updown_filter = torch.zeros((subbands, subbands, subbands), dtype=torch.float32)
         for k in range(subbands):
             updown_filter[k, k, 0] = 1.0
-        self.register_buffer("updown_filter", updown_filter)
+        self.register_buffer("updown_filter", updown_filter, persistent=False)
         self.subbands = subbands
 
         # keep padding info
@@ -134,3 +134,8 @@ class PQMF(nn.Module):
             x, self.updown_filter * self.subbands, stride=self.subbands
         )
         return F.conv1d(self.pad_fn(x), self.synthesis_filter)
+
+    def extra_repr(self) -> str:
+        return "subbands={}, taps={}, cutoff_ratio={}, beta={}".format(
+            self.subbands, self.taps, self.cutoff_ratio, self.beta
+        )
