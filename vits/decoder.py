@@ -8,6 +8,7 @@ from torch.nn.utils import weight_norm
 from transformers.utils import ModelOutput
 
 from .stft import TorchSTFT
+from .pqmf import PQMF
 
 if TYPE_CHECKING:
     from .configuration_vits import VITSConfig
@@ -355,3 +356,152 @@ class IstftDecoder(nn.Module):
         if not return_dict:
             return wav_fake, None
         return VITSDecoderOutput(wav_fake=wav_fake)
+
+
+class MultibandIstftDecoder(nn.Module):
+    def __init__(self, config: "VITSConfig"):
+        super().__init__()
+
+        self.config = config
+        self.speaker_id_embedding_dim = config.speaker_id_embedding_dim
+        self.in_z_channel = config.z_channels
+        self.upsample_rates = config.upsample_rates
+        self.upsample_kernel_sizes = config.upsample_kernel_sizes
+        self.upsample_initial_channel = config.upsample_initial_channel
+        self.resblock_kernel_sizes = config.resblock_kernel_sizes
+        self.resblock_dilation_sizes = config.resblock_dilation_sizes
+
+        self.gen_istft_n_fft = config.gen_istft_n_fft
+        self.gen_istft_hop_size = config.gen_istft_hop_size
+        self.subbands = config.subbands
+
+        self.num_kernels = len(self.resblock_kernel_sizes)
+        self.num_upsamples = len(self.upsample_rates)
+        self.conv1d_pre = weight_norm(
+            nn.Conv1d(self.in_z_channel, self.upsample_initial_channel, 7, 1, padding=3)
+        )
+
+        self.cond = nn.Conv1d(
+            self.speaker_id_embedding_dim, self.upsample_initial_channel, 1
+        )
+
+        self.ups = nn.ModuleList()
+        for i, (stride, kernel) in enumerate(
+            zip(self.upsample_rates, self.upsample_kernel_sizes)
+        ):
+            self.ups.append(
+                weight_norm(
+                    nn.ConvTranspose1d(
+                        self.upsample_initial_channel // (2**i),
+                        self.upsample_initial_channel // (2 ** (i + 1)),
+                        kernel_size=kernel,
+                        stride=stride,
+                        padding=(kernel - stride) // 2,
+                    )
+                )
+            )
+
+        self.resblocks = nn.ModuleList()
+        for i in range(len(self.ups)):
+            resnet_blocks_channels = self.upsample_initial_channel // (2 ** (i + 1))
+            for kernel, dilation in zip(
+                self.resblock_kernel_sizes, self.resblock_dilation_sizes
+            ):
+                self.resblocks.append(
+                    ResNetBlock(
+                        channels=resnet_blocks_channels,
+                        kernel_size=kernel,
+                        dilation=dilation,
+                    )
+                )
+
+        self.post_n_fft = self.gen_istft_n_fft
+        self.ups.apply(init_weights)
+        self.reflection_pad = torch.nn.ReflectionPad1d((1, 0))
+
+        self.subband_conv1d_post = weight_norm(
+            nn.Conv1d(
+                resnet_blocks_channels,
+                self.subbands * (self.post_n_fft + 2),
+                7,
+                1,
+                padding=3,
+            )
+        )
+
+        self.subband_conv1d_post.apply(init_weights)
+
+        self.stft = TorchSTFT(
+            filter_length=self.gen_istft_n_fft,
+            hop_length=self.gen_istft_hop_size,
+            win_length=self.gen_istft_n_fft,
+        )
+        self.pqmf = PQMF()
+
+    def forward(
+        self, z: Tensor, speaker_id_embedded: Tensor, return_dict: Optional[bool] = None
+    ):
+        """
+        Args:
+            z (FloatTensor): (batch_size, config.z_channels, T)
+            speaker_id_embedded (FloatTensor):
+                (batch_size, config.speaker_id_embedding_dim, 1)
+        """
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+
+        x = self.conv1d_pre(z) + self.cond(speaker_id_embedded)  # [B, ch, length]
+
+        for i in range(self.num_upsamples):
+            x = F.leaky_relu(x, 0.1)
+            x = self.ups[i](x)
+
+            xs = None
+            for j in range(self.num_kernels):
+                if xs is None:
+                    xs = self.resblocks[i * self.num_kernels + j](x)
+                else:
+                    xs += self.resblocks[i * self.num_kernels + j](x)
+            x = xs / self.num_kernels
+
+        x = F.leaky_relu(x)
+        x = self.reflection_pad(x)
+        x = self.subband_conv1d_post(x)
+        x = torch.reshape(
+            x, (x.shape[0], self.subbands, x.shape[1] // self.subbands, x.shape[-1])
+        )
+
+        spec = torch.exp(x[:, :, : self.post_n_fft // 2 + 1, :])
+        phase = torch.pi * torch.sin(x[:, :, self.post_n_fft // 2 + 1 :, :])
+
+        y_mb_hat = self.stft.inverse(
+            torch.reshape(
+                spec,
+                (
+                    spec.shape[0] * self.subbands,
+                    self.gen_istft_n_fft // 2 + 1,
+                    spec.shape[-1],
+                ),
+            ),
+            torch.reshape(
+                phase,
+                (
+                    phase.shape[0] * self.subbands,
+                    self.gen_istft_n_fft // 2 + 1,
+                    phase.shape[-1],
+                ),
+            ),
+        )
+        y_mb_hat = torch.reshape(
+            y_mb_hat, (x.shape[0], self.subbands, 1, y_mb_hat.shape[-1])
+        )
+        y_mb_hat = y_mb_hat.squeeze(-2)
+        y_g_hat = self.pqmf.synthesis(y_mb_hat)
+
+        if not return_dict:
+            return y_g_hat, y_mb_hat
+        return VITSDecoderOutput(
+            wav_fake=y_g_hat,
+            wav_fake_mb=y_mb_hat,
+        )
